@@ -1,5 +1,5 @@
 from fonts import Fonts
-from caligrafia import Plantilla
+from caligrafia import Plantilla, Mode
 import palabras
 import helpers
 
@@ -19,13 +19,16 @@ plantilla.set_letter_size(10)
 # plantilla.set_letters("gG")
 
 #PARA PALABRAS (habrá que cambiar el cell_size según la longitud de la palabra)
-plantilla.accurate_cell_size_y(30)
-plantilla.accurate_cell_size_x(50)
+plantilla.accurate_cell_size_y(1)
+# plantilla.accurate_cell_size_x(50)
 plantilla.set_language("ru")
 #SI SE QUIEREN PLANTILLAS DE PALABRAS, USAR words
-# plantilla.set_words(["HOLA", "MANOLA", "COLA"])
+words = [word.name.capitalize() for word in palabras.CursoRuso.Lesion1]
+words5 = [words[i: i + 5] for i in range(0, len(words), 5)]
+plantilla.set_words(words5[0])
+plantilla.set_mode(Mode.SINGLE_PAGE_WORDS)
 #SI SE QUIEREN PLANTILLAS DE LETRAS, USAR letters
-plantilla.set_letters("adfñlk")
+# plantilla.set_letters("hola")
 plantilla.set_font(Fonts.OPENSANS)
 plantilla.set_color(helpers.Colors.GREY)
 
@@ -33,6 +36,4 @@ plantilla.set_color(helpers.Colors.GREY)
 # Guardar plantillas como png o en un pdf
 # plantilla.save_png()
 plantilla.save_pdf()
-
-
-
+print(words5)

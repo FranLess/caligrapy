@@ -7,6 +7,7 @@ def to_pixels(size_in_mm: float, dpi: float) -> int:
 class Mode(Enum):
     WORDS = 1
     LETTERS = 2
+    SINGLE_PAGE_WORDS = 3
 
 class Plantilla:
     VERTICAL_SPACING_MM = 15
@@ -14,30 +15,70 @@ class Plantilla:
 
     def __init__(self):
         self.images: list[tuple[Image.Image, str]] = []
-        self.words = False
+        self.mode:Mode
         self.language = "es"
         self.accurate_cell_size_x_px = 0
         self.accurate_cell_size_y_px = 0
+        self.single_page_words:bool = False
         # Convertir a píxeles
 
     def create_images(self):
         # Crear imagenes en blanco
         if self.are_letters():
             self.create_layouts(self.letters)
-        if self.are_words():
+        elif self.are_words():
+            self.create_layouts(self.words)
+        else:
             self.create_layouts(self.words)
 
     def create_layouts(self, characters: list):
-        for letter in characters:
+        if self.are_single_page_words():
+            if len(characters) > 5:
+                raise ValueError("single page words only suport five (5) words at once")
             image = Image.new("RGB", (self.width_px, self.height_px), "white")
             draw = ImageDraw.Draw(image)
-            self.draw_letter(letter, draw)
-            self.images.append((image, letter))
+            self.draw_single_page_words(characters, draw)
+            self.images.append((image, ' '.join(characters)))
+        else:
+            for letter in characters:
+                image = Image.new("RGB", (self.width_px, self.height_px), "white")
+                draw = ImageDraw.Draw(image)
+                self.draw_letter(letter, draw)  
+                self.images.append((image, letter))
 
-    def draw_letter(self, letter: str, draw: ImageDraw):
+    def draw_single_page_words(self, words: list[str, str, str, str, str], draw: ImageDraw):
+        # TODO implementar el single page words
         # Dibujar las letras en cuadricula
+        counter = 0
+        vertical_spacing_check_point = self.margin_px
+        for word in words:
+            vertical_spacing = self.letter_size_px
+            horizontal_spacing = self.letter_size_px * len(word)
+            vertical_spacing = int(vertical_spacing) + self.accurate_cell_size_y_px
+            horizontal_spacing = int(horizontal_spacing) + self.accurate_cell_size_x_px
+
+            for i, y in enumerate(
+                range(vertical_spacing_check_point, self.height_px - self.margin_px, vertical_spacing)
+            ):
+                if counter > 0 and counter % 5 == 0:
+                    vertical_spacing_check_point = y
+                    counter += 1
+                    break
+                counter += 1
+                for j, x in enumerate(
+                    range(
+                        self.margin_px, self.width_px - self.margin_px, horizontal_spacing
+                    )
+                ):
+                    if x + horizontal_spacing > self.width_px:
+                        continue
+                    draw.text(
+                        (x, y), word, language="ru", fill=self.font_color, font=self.font
+                    )
+
+    def draw_letter(self, characters: list[str], draw: ImageDraw):
         vertical_spacing = self.letter_size_px
-        horizontal_spacing = self.letter_size_px * len(letter)
+        horizontal_spacing = self.letter_size_px * len(characters)
         vertical_spacing = int(vertical_spacing) + self.accurate_cell_size_y_px
         horizontal_spacing = int(horizontal_spacing) + self.accurate_cell_size_x_px
         for i, y in enumerate(
@@ -49,7 +90,7 @@ class Plantilla:
                 )
             ):
                 draw.text(
-                    (x, y), letter, language="ru", fill=self.font_color, font=self.font
+                    (x, y), characters, language="ru", fill=self.font_color, font=self.font
                 )
 
     def save_png(self):
@@ -62,14 +103,15 @@ class Plantilla:
     def save_pdf(self):
         self.ensure_created()
         images_to_save = [image.convert("RGB") for image, _ in self.images]
+        name = self.letters if self.are_letters() else '-'.join(self.words)
         images_to_save[0].save(
-            f"./out/{self.letters}-plantillas.pdf",
+            f"./out/{name}-plantillas.pdf",
             "PDF",
             resolution=100,
             save_all=True,
             append_images=images_to_save[1:],
         )
-        print(f"pdf guardado en ./out/{self.letters}-plantillas.pdf")
+        print(f"pdf guardado en ./out/{name}-plantillas.pdf")
 
     def ensure_created(self):
         if len(self.images) < 1:
@@ -86,6 +128,9 @@ class Plantilla:
 
     def are_letters(self) -> bool:
         return True if self.mode == Mode.LETTERS else False
+    
+    def are_single_page_words(self) -> bool:
+        return True if self.mode == Mode.SINGLE_PAGE_WORDS else False
 
     def set_dpi(self, dpi):
         self.dpi = dpi
