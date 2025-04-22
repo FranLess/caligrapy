@@ -47,8 +47,6 @@ class Plantilla:
                 self.images.append((image, letter))
 
     def draw_single_page_words(self, words: list[str, str, str, str, str], draw: ImageDraw):
-        # TODO implementar el single page words
-        # Dibujar las letras en cuadricula
         counter = 0
         vertical_spacing_check_point = self.margin_px
         for word in words:
