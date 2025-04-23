@@ -6,6 +6,7 @@ class Sheets:
 class Colors:
     WHITE: tuple[int, int, int]  = (255, 255, 255)
     BLACK: tuple[int, int, int] = (0, 0, 0)
-    GREY: tuple[int, int, int] = (240, 240, 240)
+    GREY = (220, 220, 220) 
+    SOFT_GREY: tuple[int, int, int] = (240, 240, 240)
 
 

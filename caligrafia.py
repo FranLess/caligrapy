@@ -1,177 +1,274 @@
 from PIL import Image, ImageDraw, ImageFont
 from enum import Enum
 
+from enum import Enum
+from PIL import Image, ImageDraw, ImageFont
+from typing import List, Tuple, Optional, Union
+import os
+
+
 def to_pixels(size_in_mm: float, dpi: float) -> int:
+    """Convert millimeters to pixels based on DPI."""
     return int(size_in_mm * dpi / 25.4)
+
 
 class Mode(Enum):
     WORDS = 1
     LETTERS = 2
     SINGLE_PAGE_WORDS = 3
 
+
 class Plantilla:
-    VERTICAL_SPACING_MM = 15
-    VERTICAL_SPACING_PX = to_pixels(VERTICAL_SPACING_MM, 300)
+    """Class to create template images with text for printing."""
+
+    # Class constants
+    DEFAULT_VERTICAL_SPACING_MM = 15
+    DEFAULT_DPI = 300
+    DEFAULT_FONT_COLOR = (0, 0, 0)  # Black
+    OUTPUT_DIR = "./out"
 
     def __init__(self):
-        self.images: list[tuple[Image.Image, str]] = []
-        self.mode:Mode
-        self.language = "es"
-        self.accurate_cell_size_x_px = 0
-        self.accurate_cell_size_y_px = 0
-        self.single_page_words:bool = False
-        # Convertir a píxeles
+        # Initialize basic properties
+        self.images: List[Tuple[Image.Image, str]] = []
+        self.mode: Mode = Mode.WORDS
+        self.language: str = "es"
+        self.dpi: int = self.DEFAULT_DPI
 
-    def create_images(self):
-        # Crear imagenes en blanco
-        if self.are_letters():
-            self.create_layouts(self.letters)
-        elif self.are_words():
+        # Sizing properties (will be set later)
+        self.width_px: int = 0
+        self.height_px: int = 0
+        self.margin_px: int = 0
+        self.letter_size_px: int = 0
+        self.accurate_cell_size_x_px: int = 0
+        self.accurate_cell_size_y_px: int = 0
+        self.vertical_spacing_px: int = 0
+        self.horizontal_spacing_px: int = 0
+
+        # Content properties
+        self.letters: str = ""
+        self.words: List[str] = []
+        self.font = None
+        self.font_color = self.DEFAULT_FONT_COLOR
+
+        # Create output directory if it doesn't exist
+        os.makedirs(self.OUTPUT_DIR, exist_ok=True)
+
+    def create_images(self) -> None:
+        """Create images based on the current mode."""
+        if self.mode == Mode.LETTERS:
+            self.create_layouts([self.letters])
+        elif self.mode in (Mode.WORDS, Mode.SINGLE_PAGE_WORDS):
             self.create_layouts(self.words)
         else:
-            self.create_layouts(self.words)
+            raise ValueError(f"Unsupported mode: {self.mode}")
 
-    def create_layouts(self, characters: list):
-        if self.are_single_page_words():
-            if len(characters) > 5:
-                raise ValueError("single page words only suport five (5) words at once")
+    def create_layouts(self, characters: List[str]) -> None:
+        """Create layout images for the given characters."""
+        if self.mode == Mode.SINGLE_PAGE_WORDS:
+            self._create_single_page_layout(characters)
+        else:
+            self._create_individual_layouts(characters)
+
+    def _create_single_page_layout(self, words: List[str]) -> None:
+        """Create a single page with multiple words."""
+        if len(words) > 5:
+            raise ValueError(
+                "Single page words only supports five (5) words at once")
+
+        image = Image.new("RGB", (self.width_px, self.height_px), "white")
+        draw = ImageDraw.Draw(image)
+        self._draw_single_page_words(words, draw)
+        self.images.append((image, ' '.join(words)))
+
+    def _create_individual_layouts(self, characters: List[str]) -> None:
+        """Create individual layouts for each character."""
+        for char in characters:
             image = Image.new("RGB", (self.width_px, self.height_px), "white")
             draw = ImageDraw.Draw(image)
-            self.draw_single_page_words(characters, draw)
-            self.images.append((image, ' '.join(characters)))
-        else:
-            for letter in characters:
-                image = Image.new("RGB", (self.width_px, self.height_px), "white")
-                draw = ImageDraw.Draw(image)
-                self.draw_letter(letter, draw)  
-                self.images.append((image, letter))
+            self._draw_text(char, draw)
+            self.images.append((image, char))
 
-    def draw_single_page_words(self, words: list[str, str, str, str, str], draw: ImageDraw):
+    def _draw_single_page_words(self, words: List[str], draw: ImageDraw.Draw) -> None:
+        """Draw multiple words on a single page."""
         counter = 0
-        vertical_spacing_check_point = self.margin_px
+        vertical_position = self.margin_px
+
         for word in words:
-            vertical_spacing = self.letter_size_px
-            horizontal_spacing = self.letter_size_px * len(word)
-            vertical_spacing = int(vertical_spacing) + self.accurate_cell_size_y_px
-            horizontal_spacing = int(horizontal_spacing) + self.accurate_cell_size_x_px
+            # Calculate spacing
+            vertical_spacing = self.letter_size_px + self.accurate_cell_size_y_px
+            horizontal_spacing = (self.letter_size_px *
+                                  len(word)) + self.accurate_cell_size_x_px
 
             for i, y in enumerate(
-                range(vertical_spacing_check_point, self.height_px - self.margin_px, vertical_spacing)
+                range(vertical_position, self.height_px -
+                      self.margin_px, vertical_spacing)
             ):
-                if counter > 0 and counter % 5 == 0:
-                    vertical_spacing_check_point = y
+                if counter > 0 and counter % 5 + (5 - len(words)) == 0:
+                    vertical_position = y
                     counter += 1
                     break
+
                 counter += 1
                 for j, x in enumerate(
-                    range(
-                        self.margin_px, self.width_px - self.margin_px, horizontal_spacing
-                    )
+                    range(self.margin_px, self.width_px -
+                          self.margin_px, horizontal_spacing)
                 ):
                     if x + horizontal_spacing > self.width_px:
                         continue
+
                     draw.text(
-                        (x, y), word, language="ru", fill=self.font_color, font=self.font
+                        (x, y), word, language=self.language, fill=self.font_color, font=self.font
                     )
 
-    def draw_letter(self, characters: list[str], draw: ImageDraw):
-        vertical_spacing = self.letter_size_px
-        horizontal_spacing = self.letter_size_px * len(characters)
-        vertical_spacing = int(vertical_spacing) + self.accurate_cell_size_y_px
-        horizontal_spacing = int(horizontal_spacing) + self.accurate_cell_size_x_px
-        for i, y in enumerate(
-            range(self.margin_px, self.height_px - self.margin_px, vertical_spacing)
-        ):
-            for j, x in enumerate(
-                range(
-                    self.margin_px, self.width_px - self.margin_px, horizontal_spacing
-                )
-            ):
+    def _draw_text(self, text: str, draw: ImageDraw.Draw) -> None:
+        """Draw repeated text on the image."""
+        vertical_spacing = self.letter_size_px + self.accurate_cell_size_y_px
+        horizontal_spacing = (self.letter_size_px * len(text)
+                              ) + self.accurate_cell_size_x_px
+
+        for y in range(self.margin_px, self.height_px - self.margin_px, vertical_spacing):
+            for x in range(self.margin_px, self.width_px - self.margin_px, horizontal_spacing):
+                if x + horizontal_spacing > self.width_px:
+                    continue
+
                 draw.text(
-                    (x, y), characters, language="ru", fill=self.font_color, font=self.font
+                    (x, y), text, language=self.language, fill=self.font_color, font=self.font
                 )
 
-    def save_png(self):
+    def save_png(self) -> None:
+        """Save each image as a PNG file."""
         self.ensure_created()
-        # Guardar la imagen
-        for image, letter in self.images:
-            image.save(f"./out/plantilla-{letter}.png")
-            print(f"Imagen generada: ./out/plantilla-{letter}.png")
 
-    def save_pdf(self):
+        for image, text in self.images:
+            filepath = os.path.join(self.OUTPUT_DIR, f"plantilla-{text}.png")
+            image.save(filepath)
+            print(f"Image generated: {filepath}")
+
+    def save_pdf(self) -> None:
+        """Save all images as a single PDF file."""
         self.ensure_created()
+
         images_to_save = [image.convert("RGB") for image, _ in self.images]
-        name = self.letters if self.are_letters() else '-'.join(self.words)
+
+        if not images_to_save:
+            print("No images to save")
+            return
+
+        name = self.letters if self.mode == Mode.LETTERS else '-'.join(
+            self.words)
+        pdf_path = os.path.join(self.OUTPUT_DIR, f"{name}-plantillas.pdf")
+
         images_to_save[0].save(
-            f"./out/{name}-plantillas.pdf",
+            pdf_path,
             "PDF",
             resolution=100,
             save_all=True,
             append_images=images_to_save[1:],
         )
-        print(f"pdf guardado en ./out/{name}-plantillas.pdf")
+        print(f"PDF saved at: {pdf_path}")
 
-    def ensure_created(self):
-        if len(self.images) < 1:
+    def ensure_created(self) -> None:
+        """Ensure images are created before saving."""
+        if not self.images:
             self.create_images()
 
-    def set_language(self, lang: str):
+    # Configuration methods
+    def set_language(self, lang: str) -> 'Plantilla':
+        """Set the language for text rendering."""
         self.language = lang
+        return self
 
-    def set_mode(self, mode: Mode):
+    def set_mode(self, mode: Mode) -> 'Plantilla':
+        """Set the mode for template generation."""
         self.mode = mode
+        return self
 
-    def are_words(self) -> bool:
-        return True if self.mode == Mode.WORDS else False
-
-    def are_letters(self) -> bool:
-        return True if self.mode == Mode.LETTERS else False
-    
-    def are_single_page_words(self) -> bool:
-        return True if self.mode == Mode.SINGLE_PAGE_WORDS else False
-
-    def set_dpi(self, dpi):
+    def set_dpi(self, dpi: int) -> 'Plantilla':
+        """Set the DPI for image generation."""
         self.dpi = dpi
+        return self
 
-    def set_width(self, width_mm):
+    def set_width(self, width_mm: float) -> 'Plantilla':
+        """Set the width in millimeters."""
         self.width_px = to_pixels(width_mm, self.dpi)
+        return self
 
-    def set_height(self, height_mm):
+    def set_height(self, height_mm: float) -> 'Plantilla':
+        """Set the height in millimeters."""
         self.height_px = to_pixels(height_mm, self.dpi)
+        return self
 
-    def accurate_cell_size_x(self, cell_size_mm):
-        self.accurate_cell_size_x_px = to_pixels(cell_size_mm, self.dpi)
-
-    def accurate_cell_size_y(self, cell_size_mm):
-        self.accurate_cell_size_y_px = to_pixels(cell_size_mm, self.dpi)
-
-    def set_letter_size(self, letter_size_mm):
+    def set_letter_size(self, letter_size_mm: float) -> 'Plantilla':
+        """Set the letter size in millimeters."""
         self.letter_size_px = to_pixels(letter_size_mm, self.dpi)
+        return self
 
-    def set_letters(self, letters: str):
-        self.letters = letters
-        self.set_mode(Mode.LETTERS)
-
-    def set_words(self, words: list[str]):
-        self.words = words
-        self.set_mode(Mode.WORDS)
-
-    def set_margin(self, margin_mm):
+    def set_margin(self, margin_mm: float) -> 'Plantilla':
+        """Set the margin size in millimeters."""
         self.margin_px = to_pixels(margin_mm, self.dpi)
+        return self
 
-    def set_font(self, font_path):
-        # Cargar una fuente (ajusta la ruta según tu sistema)
+    def set_vertical_spacing(self, vertical_spacing_mm: float) -> 'Plantilla':
+        """Set the vertical spacing in millimeters."""
+        self.vertical_spacing_px = to_pixels(vertical_spacing_mm, self.dpi)
+        return self
+
+    def set_horizontal_spacing(self, horizontal_spacing_mm: float) -> 'Plantilla':
+        """Set the horizontal spacing in millimeters."""
+        self.horizontal_spacing_px = to_pixels(horizontal_spacing_mm, self.dpi)
+        return self
+
+    def accurate_cell_size_x(self, cell_size_mm: float) -> 'Plantilla':
+        """Set the accurate cell size X in millimeters."""
+        self.accurate_cell_size_x_px = to_pixels(cell_size_mm, self.dpi)
+        return self
+
+    def accurate_cell_size_y(self, cell_size_mm: float) -> 'Plantilla':
+        """Set the accurate cell size Y in millimeters."""
+        self.accurate_cell_size_y_px = to_pixels(cell_size_mm, self.dpi)
+        return self
+
+    def set_letters(self, letters: str) -> 'Plantilla':
+        """Set letters and change mode to LETTERS."""
+        self.letters = letters
+        self.mode = Mode.LETTERS
+        return self
+
+    def set_words(self, words: List[str]) -> 'Plantilla':
+        """Set words and change mode to WORDS."""
+        self.words = words
+        self.mode = Mode.WORDS
+        return self
+
+    def set_single_page_words(self, words: List[str]) -> 'Plantilla':
+        """Set words and change mode to SINGLE_PAGE_WORDS."""
+        self.words = words
+        self.mode = Mode.SINGLE_PAGE_WORDS
+        return self
+
+    def set_font(self, font_path: str) -> 'Plantilla':
+        """Load and set the font for text rendering."""
         try:
             self.font = ImageFont.truetype(font_path, self.letter_size_px)
         except IOError:
-            self.font = ImageFont.load_default(self.letter_size_px)
-            print("Font not found.")
+            print(f"Font not found at: {font_path}. Using default font.")
+            self.font = ImageFont.load_default()
+        return self
 
-    def set_color(self, rgb: tuple[int, int, int]):
+    def set_color(self, rgb: Tuple[int, int, int]) -> 'Plantilla':
+        """Set the font color as RGB tuple."""
         self.font_color = rgb
+        return self
 
-    def set_vertical_spacing(self, vertical_spacing_mm):
-        self.vertical_spacing_px = to_pixels(vertical_spacing_mm, self.dpi)
+    # Helper methods for checking mode
+    def are_words(self) -> bool:
+        """Check if mode is WORDS."""
+        return self.mode == Mode.WORDS
 
-    def set_horizontal_spacing(self, horizontal_spacing_mm):
-        self.horizontal_spacing_px = to_pixels(horizontal_spacing_mm, self.dpi)
+    def are_letters(self) -> bool:
+        """Check if mode is LETTERS."""
+        return self.mode == Mode.LETTERS
+
+    def are_single_page_words(self) -> bool:
+        """Check if mode is SINGLE_PAGE_WORDS."""
+        return self.mode == Mode.SINGLE_PAGE_WORDS
